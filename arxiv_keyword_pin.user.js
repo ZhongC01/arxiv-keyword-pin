@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         arXiv Keyword Pin - 关键词置顶高亮
 // @namespace    https://github.com/你的用户名/arxiv-keyword-pin
-// @version      1.2
+// @version      1.1
 // @description  在 arXiv 列表页中，将匹配关键词（标题/作者/摘要）的文章置顶并高亮，支持正则，自动展开摘要
 // @author       GLM5.1
 // @license      MIT
