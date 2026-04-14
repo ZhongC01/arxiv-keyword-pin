@@ -6,6 +6,7 @@
 // @author       GLM5.1
 // @license      MIT
 // @match        https://arxiv.org/list/*
+// @match        https://arxiv.org/list?*
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
 // @grant        GM_setValue
