@@ -1,14 +1,20 @@
 // ==UserScript==
-// @name         arXiv Keyword Highlight & Pin to Top
-// @namespace    https://arxiv.org/
-// @version      1.1
-// @description  在 arXiv 列表页中，将匹配关键词的文章置顶显示并高亮
+// @name         arXiv Keyword Pin - 关键词置顶高亮
+// @namespace    https://github.com/你的用户名/arxiv-keyword-pin
+// @version      1.2
+// @description  在 arXiv 列表页中，将匹配关键词（标题/作者/摘要）的文章置顶并高亮，支持正则，自动展开摘要
+// @author       GLM5.1
+// @license      MIT
 // @match        https://arxiv.org/list/*
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addStyle
 // @run-at       document-idle
+// @updateURL    https://github.com/你的用户名/arxiv-keyword-pin/raw/main/arxiv-keyword-pin.user.js
+// @downloadURL  https://github.com/你的用户名/arxiv-keyword-pin/raw/main/arxiv-keyword-pin.user.js
+// @homepageURL  https://github.com/你的用户名/arxiv-keyword-pin
+// @supportURL   https://github.com/你的用户名/arxiv-keyword-pin/issues
 // ==/UserScript==
 
 (function () {
@@ -165,6 +171,11 @@
             border-radius: 3px;
             margin-left: 6px;
         }
+        .arxiv-kw-loading {
+            font-size: 13px;
+            color: #f39c12;
+            font-weight: 600;
+        }
     `);
 
     // ==================== 配置管理 ====================
@@ -202,14 +213,13 @@
         return keywords.map(kw => {
             if (regexMode) {
                 try {
-                    return { regex: new RegExp(kw, caseSensitive ? '' : 'i'), source: kw };
+                    return { regex: new RegExp(kw, caseSensitive ? 'g' : 'gi'), source: kw };
                 } catch (e) {
-                    console.warn(`[arXiv-KW] 无效正则: ${kw}`, e);
+                    console.warn(`[arXiv-KW] 无效正则: `, e);
                     return null;
                 }
             } else {
-                const flags = caseSensitive ? '' : 'i';
-                // 转义特殊字符，做普通文本匹配
+                const flags = caseSensitive ? 'g' : 'gi';
                 const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 return { regex: new RegExp(escaped, flags), source: kw };
             }
@@ -219,6 +229,7 @@
     function matchText(text, matchers) {
         const hits = [];
         for (const m of matchers) {
+            m.regex.lastIndex = 0;
             if (m.regex.test(text)) {
                 hits.push(m.source);
             }
@@ -230,15 +241,6 @@
     function highlightTextNode(node, matchers) {
         if (node.nodeType !== Node.TEXT_NODE) return;
         const text = node.textContent;
-        let matchResult = null;
-        for (const m of matchers) {
-            m.regex.lastIndex = 0;
-            if (m.regex.test(text)) {
-                matchResult = m;
-                break;
-            }
-        }
-        if (!matchResult) return;
 
         // 收集所有匹配位置
         const matches = [];
@@ -247,15 +249,12 @@
             let execResult;
             while ((execResult = m.regex.exec(text)) !== null) {
                 matches.push({ start: execResult.index, end: execResult.index + execResult[0].length });
-                // 防止零宽匹配死循环
-                if (execResult[0].length === 0) m.regex.lastIndex++;
-                // 对非全局正则，只匹配一次
-                if (!m.regex.global) break;
+                if (execResult[0].length === 0) { m.regex.lastIndex++; }
             }
         }
         if (matches.length === 0) return;
 
-        // 按位置排序并去重合并
+        // 按位置排序并合并重叠区间
         matches.sort((a, b) => a.start - b.start);
         const merged = [matches[0]];
         for (let i = 1; i < matches.length; i++) {
@@ -267,7 +266,7 @@
             }
         }
 
-        // 构建 DocumentFragment
+        // 构建 DocumentFragment 替换原节点
         const frag = document.createDocumentFragment();
         let lastIdx = 0;
         for (const { start, end } of merged) {
@@ -298,40 +297,218 @@
         }
     }
 
-    // ==================== 核心排序逻辑 ====================
-    function processList() {
-        const dlElements = document.querySelectorAll('dl#articles, dl');
-        let dl = null;
-        for (const d of dlElements) {
-            if (d.id === 'articles') { dl = d; break; }
-        }
-        // 如果找不到 #articles，取包含 arXiv 条目的第一个大 dl
-        if (!dl) {
-            const allDl = document.querySelectorAll('dl');
-            for (const d of allDl) {
-                if (d.querySelector('dt a[href*="/abs/"]')) {
-                    dl = d;
-                    break;
+    // ==================== 自动展开摘要 ====================
+    function expandAllAbstracts() {
+        return new Promise((resolve) => {
+            // arXiv 列表页摘要展开按钮的可能选择器
+            const toggleSelectors = [
+                'a.toggle',           // 常见的摘要切换按钮
+                '.abstract-toggle',
+                '.is-hidden',         // 折叠的摘要内容
+                '.abstract-short + .abstract-long',
+            ];
+
+            // 方式1：点击所有摘要展开按钮
+            const toggleButtons = document.querySelectorAll('a[onclick*="toggle"], .toggle, a.toggle');
+            let clicked = 0;
+            toggleButtons.forEach(btn => {
+                const parentDD = btn.closest('dd');
+                if (parentDD) {
+                    const abstractHidden = parentDD.querySelector('.mathjax');
+                    if (!abstractHidden || abstractHidden.offsetParent === null) {
+                        btn.click();
+                        clicked++;
+                    }
+                }
+            });
+
+            // 方式2：直接展开隐藏的摘要块
+            const hiddenAbstracts = document.querySelectorAll('.abstract-short');
+            hiddenAbstracts.forEach(el => {
+                // 有些页面摘要被截断，点击 "more" 链接
+                const moreLink = el.querySelector('a');
+                if (moreLink) moreLink.click();
+            });
+
+            // 方式3：处理 arXiv 新版页面的展开逻辑
+            // 新版页面中，摘要可能在 <dd> 内的 .mathjax 中，需要点击展开
+            const ddElements = document.querySelectorAll('dl#articles dd, dl dd');
+            ddElements.forEach(dd => {
+                const abstractEl = dd.querySelector('.mathjax');
+                if (abstractEl && abstractEl.style.display === 'none') {
+                    abstractEl.style.display = '';
+                }
+                // 也检查 .abstract-collapse 等
+                const collapsible = dd.querySelector('.abstract-collapse, .collapse');
+                if (collapsible && collapsible.style.display === 'none') {
+                    collapsible.style.display = '';
+                }
+            });
+
+            // 等待一小段时间让 DOM 更新
+            setTimeout(resolve, 500);
+        });
+    }
+
+    // 通过 AJAX 加载摘要（arXiv 有些列表页摘要需要异步获取）
+    async function fetchMissingAbstracts(pairs) {
+        const MAX_CONCURRENT = 5;
+        let queue = [];
+        let active = 0;
+
+        return new Promise((resolve) => {
+            function next() {
+                if (queue.length === 0 && active === 0) {
+                    resolve();
+                    return;
+                }
+                if (queue.length === 0 || active >= MAX_CONCURRENT) return;
+
+                active++;
+                const { dd, url } = queue.shift();
+
+                fetch(url)
+                    .then(r => r.text())
+                    .then(html => {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+
+                        // 从文章详情页提取摘要
+                        const abstractEl = doc.querySelector('.abstract.mathjax, #abstract, .desc.abstract');
+                        if (abstractEl) {
+                            const abstractText = abstractEl.textContent
+                                .replace(/^Abstract\s*:?\s*/i, '')
+                                .trim();
+
+                            // 在列表页的 dd 中创建或更新摘要元素
+                            let existingAbstract = dd.querySelector('.mathjax, .abstract-text');
+                            if (!existingAbstract) {
+                                existingAbstract = document.createElement('div');
+                                existingAbstract.className = 'mathjax';
+                                dd.appendChild(existingAbstract);
+                            }
+                            existingAbstract.textContent = abstractText;
+                        }
+                    })
+                    .catch(err => {
+                        console.warn('[arXiv-KW] 获取摘要失败:', url, err);
+                    })
+                    .finally(() => {
+                        active--;
+                        next();
+                    });
+            }
+
+            for (const pair of pairs) {
+                const linkEl = pair.dt.querySelector('a[href*="/abs/"]');
+                if (!linkEl) continue;
+
+                const abstractEl = pair.dd.querySelector('.mathjax, .abstract-text');
+                const abstractText = abstractEl ? abstractEl.textContent.trim() : '';
+
+                // 如果摘要为空或过短（可能没有真正加载），则异步获取
+                if (abstractText.length < 20) {
+                    const absUrl = linkEl.href;
+                    if (absUrl) {
+                        queue.push({ dd: pair.dd, url: absUrl });
+                    }
                 }
             }
-        }
-        if (!dl) {
-            console.warn('[arXiv-KW] 未找到文章列表');
-            return;
-        }
 
+            if (queue.length === 0) {
+                resolve();
+            } else {
+                // 启动并发
+                for (let i = 0; i < Math.min(MAX_CONCURRENT, queue.length); i++) {
+                    next();
+                }
+            }
+        });
+    }
+
+    // ==================== 核心排序逻辑 ====================
+    async function processList() {
         const keywords = loadKeywords();
         const caseSensitive = isCaseSensitive();
         const regexMode = isRegexMode();
         const matchers = buildMatchers(keywords, caseSensitive, regexMode);
 
         if (matchers.length === 0) {
-            // 没有关键词时，恢复原始状态
             restoreOriginal();
             return;
         }
 
+        // 显示处理状态
+        updateStatus('正在展开摘要...');
+
+        // 先尝试展开页面上的摘要
+        await expandAllAbstracts();
+
         // 收集所有 dt-dd 对
+        const dl = findArticleList();
+        if (!dl) {
+            console.warn('[arXiv-KW] 未找到文章列表');
+            updateStatus('');
+            return;
+        }
+
+        const pairs = collectPairs(dl);
+        if (pairs.length === 0) {
+            updateStatus('');
+            return;
+        }
+
+        // 对缺失摘要的文章异步获取
+        updateStatus('正在加载摘要...');
+        await fetchMissingAbstracts(pairs);
+
+        updateStatus('正在匹配关键词...');
+
+        // 对每个 pair 做匹配
+        const matched = [];
+        const unmatched = [];
+
+        for (const pair of pairs) {
+            const titleEl = pair.dd.querySelector('.list-title');
+            const authorsEl = pair.dd.querySelector('.list-authors');
+            const abstractEl = pair.dd.querySelector('.mathjax, .abstract-text');
+
+            const title = titleEl ? titleEl.textContent.replace(/^Title\s*:?\s*/i, '').trim() : '';
+            const authors = authorsEl ? authorsEl.textContent.replace(/^Authors\s*:?\s*/i, '').trim() : '';
+            const abstract = abstractEl ? abstractEl.textContent.replace(/^Abstract\s*:?\s*/i, '').trim() : '';
+
+            const fullText = `${title} ${authors} ${abstract}`;
+            const hits = matchText(fullText, matchers);
+
+            if (hits.length > 0) {
+                matched.push({ ...pair, hits });
+            } else {
+                unmatched.push(pair);
+            }
+        }
+
+        // 重新排列 DOM
+        rearrangeDOM(dl, matched, unmatched, matchers);
+        updateCount(matched.length, pairs.length);
+    }
+
+    function findArticleList() {
+        // 优先找 #articles
+        let dl = document.querySelector('dl#articles');
+        if (dl) return dl;
+
+        // 回退：找包含 arXiv 条目的大 dl
+        const allDl = document.querySelectorAll('dl');
+        for (const d of allDl) {
+            if (d.querySelector('dt a[href*="/abs/"]')) {
+                dl = d;
+                break;
+            }
+        }
+        return dl;
+    }
+
+    function collectPairs(dl) {
         const pairs = [];
         const children = dl.children;
         let currentDt = null;
@@ -344,40 +521,13 @@
                 currentDt = null;
             }
         }
+        return pairs;
+    }
 
-        if (pairs.length === 0) return;
-
-        // 保存原始顺序（首次）
+    function rearrangeDOM(dl, matched, unmatched, matchers) {
+        // 保存原始顺序标记
         if (!dl.dataset.arxivKwOriginal) {
             dl.dataset.arxivKwOriginal = '1';
-        }
-
-        // 对每个 pair 做匹配
-        const sectionHeaders = []; // 保留分区标题（如 "New submissions"）
-        const matched = [];
-        const unmatched = [];
-
-        // 收集 dl 之前的非 dt/dd 元素（标题等）
-        const beforeElements = [];
-        // 不需要处理，它们在 dl 外面
-
-        for (const pair of pairs) {
-            const titleEl = pair.dd.querySelector('.list-title');
-            const authorsEl = pair.dd.querySelector('.list-authors');
-            const abstractEl = pair.dd.querySelector('.mathjax');
-
-            const title = titleEl ? titleEl.textContent : '';
-            const authors = authorsEl ? authorsEl.textContent : '';
-            const abstract = abstractEl ? abstractEl.textContent : '';
-
-            const fullText = `${title} ${authors} ${abstract}`;
-            const hits = matchText(fullText, matchers);
-
-            if (hits.length > 0) {
-                matched.push({ ...pair, hits });
-            } else {
-                unmatched.push(pair);
-            }
         }
 
         // 清空 dl
@@ -385,10 +535,12 @@
             dl.removeChild(dl.firstChild);
         }
 
-        // 如果有匹配项，添加分区标记
+        const keywordList = matchers.map(m => m.source);
+
+        // 匹配区标题
         if (matched.length > 0) {
             const separatorDt = document.createElement('dt');
-            separatorDt.innerHTML = `<span class="arxiv-kw-section-label">⭐ 关键词匹配</span> 命中 ${matched.length} 篇 — 关键词: ${keywords.map(k => `"${k}"`).join(', ')}`;
+            separatorDt.innerHTML = `<span class="arxiv-kw-section-label">⭐ 关键词匹配</span> 命中 ${matched.length} 篇 — 关键词: "${keywordList.join(', ')}"`;
             separatorDt.style.cssText = 'padding: 8px 0; font-size: 14px; background: #fef9e7;';
             dl.appendChild(separatorDt);
             const spacerDd = document.createElement('dd');
@@ -396,13 +548,12 @@
             dl.appendChild(spacerDd);
         }
 
-        // 先放匹配的
+        // 放置匹配的文章
         for (const pair of matched) {
             pair.dt.classList.add('arxiv-kw-pinned');
             pair.dd.classList.add('arxiv-kw-pinned');
             dl.appendChild(pair.dt);
             dl.appendChild(pair.dd);
-            // 高亮
             highlightElement(pair.dd, matchers);
         }
 
@@ -417,23 +568,16 @@
             dl.appendChild(spacerDd2);
         }
 
-        // 再放未匹配的
+        // 放置未匹配的文章
         for (const pair of unmatched) {
             pair.dt.classList.remove('arxiv-kw-pinned');
             pair.dd.classList.remove('arxiv-kw-pinned');
             dl.appendChild(pair.dt);
             dl.appendChild(pair.dd);
         }
-
-        // 更新计数
-        updateCount(matched.length, pairs.length);
     }
 
     function restoreOriginal() {
-        // 简单刷新即可恢复原始顺序
-        const countEl = document.querySelector('.arxiv-kw-count');
-        if (countEl) countEl.textContent = '';
-        // 移除高亮和标记
         document.querySelectorAll('.arxiv-kw-pinned').forEach(el => el.classList.remove('arxiv-kw-pinned'));
         document.querySelectorAll('.arxiv-kw-highlight').forEach(el => {
             const text = document.createTextNode(el.textContent);
@@ -442,41 +586,47 @@
         document.querySelectorAll('.arxiv-kw-section-label').forEach(el => {
             el.closest('dt')?.remove();
         });
+        const countEl = document.querySelector('.arxiv-kw-count');
+        if (countEl) countEl.textContent = '';
+        const statusEl = document.querySelector('.arxiv-kw-loading');
+        if (statusEl) statusEl.textContent = '';
     }
 
     function updateCount(matched, total) {
         const countEl = document.querySelector('.arxiv-kw-count');
         if (countEl) {
-            countEl.textContent = `${matched}/${total} 篇命中`;
+            countEl.textContent = `${matched} / ${total} 篇命中`;
         }
+        const statusEl = document.querySelector('.arxiv-kw-loading');
+        if (statusEl) statusEl.textContent = '';
+    }
+
+    function updateStatus(msg) {
+        let statusEl = document.querySelector('.arxiv-kw-loading');
+        if (statusEl) statusEl.textContent = msg;
     }
 
     // ==================== UI 构建 ====================
     function createToolbar() {
-        // 防止重复
         if (document.querySelector('.arxiv-kw-bar')) return;
 
         const bar = document.createElement('div');
         bar.className = 'arxiv-kw-bar';
 
-        const keywords = loadKeywords();
-        const caseSensitive = isCaseSensitive();
-        const regexMode = isRegexMode();
-
         bar.innerHTML = `
             <span style="font-weight:700; white-space:nowrap;">🏷️ 关键词:</span>
-            <input type="text" class="arxiv-kw-input" placeholder="输入关键词，空格分隔（如：axion dark matter）" value="${keywords.join(' ')}" />
+            <input type="text" class="arxiv-kw-input" placeholder="输入关键词，空格分隔（如：axion dark matter）" value="" />
             <button class="arxiv-kw-btn-apply" title="应用关键词排序">应用</button>
             <button class="arxiv-kw-btn-clear" title="清除所有关键词">清除</button>
             <button class="arxiv-kw-btn-config" title="高级配置（每行一个关键词、正则等）">⚙ 配置</button>
-            <label><input type="checkbox" class="arxiv-kw-case" ${caseSensitive ? 'checked' : ''} /> 区分大小写</label>
-            <label><input type="checkbox" class="arxiv-kw-regex" ${regexMode ? 'checked' : ''} /> 正则模式</label>
+            <label><input type="checkbox" class="arxiv-kw-case" /> 区分大小写</label>
+            <label><input type="checkbox" class="arxiv-kw-regex" /> 正则模式</label>
             <span class="arxiv-kw-count"></span>
+            <span class="arxiv-kw-loading"></span>
         `;
 
         document.body.prepend(bar);
 
-        // 事件绑定
         const input = bar.querySelector('.arxiv-kw-input');
         const applyBtn = bar.querySelector('.arxiv-kw-btn-apply');
         const clearBtn = bar.querySelector('.arxiv-kw-btn-clear');
@@ -517,7 +667,6 @@
     }
 
     function showConfigModal() {
-        // 移除已有弹窗
         document.querySelector('.arxiv-kw-modal-overlay')?.remove();
 
         const overlay = document.createElement('div');
@@ -542,7 +691,7 @@
                 </p>
                 <textarea class="arxiv-kw-modal-textarea">${keywords.join('\n')}</textarea>
                 <div class="modal-hint" style="margin-top:10px;">
-                    当前模式：${regexMode ? '🔶 正则匹配' : '🔷 纯文本匹配'} ${caseSensitive ? '| 区分大小写' : '| 不区分大小写'}
+                    当前模式：${regexMode ? '正则' : '普通文本'} | ${caseSensitive ? '区分大小写' : '不区分大小写'}
                 </div>
                 <div class="modal-actions">
                     <button class="arxiv-kw-btn-clear modal-cancel">取消</button>
@@ -565,7 +714,6 @@
         saveBtn.addEventListener('click', () => {
             const lines = textarea.value.split('\n').map(k => k.trim()).filter(k => k.length > 0);
             saveKeywords(lines);
-            // 同步更新工具栏输入框
             const input = document.querySelector('.arxiv-kw-input');
             if (input) input.value = lines.join(' ');
             overlay.remove();
@@ -576,22 +724,19 @@
     }
 
     // ==================== 初始化 ====================
-    function init() {
+    async function init() {
         createToolbar();
-        // 如果已有保存的关键词，自动执行一次
         if (loadKeywords().length > 0) {
-            processList();
+            await processList();
         }
     }
 
-    // 等待页面加载完成
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
         setTimeout(init, 300);
     } else {
         window.addEventListener('DOMContentLoaded', () => setTimeout(init, 300));
     }
 
-    // 注册油猴菜单命令
     GM_registerMenuCommand('🏷️ 设置关键词', showConfigModal);
     GM_registerMenuCommand('🔄 刷新排序', processList);
 
