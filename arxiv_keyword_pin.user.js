@@ -3,7 +3,7 @@
 // @namespace    https://github.com/你的用户名/arxiv-keyword-pin
 // @version      1.1
 // @description  在 arXiv 列表页中，将匹配关键词（标题/作者/摘要）的文章置顶并高亮，支持正则，自动展开摘要
-// @author       GLM5.1
+// @author       WYZ
 // @license      MIT
 // @match        https://arxiv.org/list/*
 // @match        https://arxiv.org/list?*
@@ -23,159 +23,415 @@
 
     // ==================== 样式注入 ====================
     GM_addStyle(`
+        .arxiv-kw-article-card {
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+            color: inherit;
+        }
+        .arxiv-kw-article-card:hover {
+            background: rgba(0,0,0,0.02);
+            border-color: rgba(0,0,0,0.12);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .arxiv-kw-article-card.pinned {
+            border-left: 4px solid #e74c3c;
+            background: linear-gradient(90deg, #fef9e7 0%, transparent 30%);
+            padding-left: 8px;
+        }
+        .arxiv-kw-article-card.pinned:hover {
+            background: linear-gradient(90deg, #fef9e7 0%, rgba(0,0,0,0.02) 30%);
+        }
+        .arxiv-kw-card-body {
+            display: block;
+            min-width: 0;
+            line-height: 1.58;
+        }
+        .arxiv-kw-card-body .meta {
+            margin: 0;
+        }
+        .arxiv-kw-card-body .list-title,
+        .arxiv-kw-card-body .list-authors,
+        .arxiv-kw-card-body .list-comments,
+        .arxiv-kw-card-body .list-subjects,
+        .arxiv-kw-card-body .list-journal-ref,
+        .arxiv-kw-card-body .list-report-no,
+        .arxiv-kw-card-body .list-doi {
+            margin: 0 0 6px 0;
+        }
+        .arxiv-kw-card-body .mathjax,
+        .arxiv-kw-card-body .abstract-text,
+        .arxiv-kw-card-body .abstract,
+        .arxiv-kw-card-body .abstract-long,
+        .arxiv-kw-card-body .abstract-full {
+            margin: 0;
+            display: block !important;
+            max-height: none !important;
+            overflow: visible !important;
+            line-height: 1.62;
+        }
+        .arxiv-kw-card-body mjx-container[display="true"],
+        .arxiv-kw-card-body .MathJax_Display {
+            margin: 0.6em 0 !important;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .arxiv-kw-card-links {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0,0,0,0.08);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .arxiv-kw-card-links a {
+            color: #0f4aa2;
+            text-decoration: none;
+            border-bottom: 1px dashed rgba(15,74,162,0.35);
+            white-space: nowrap;
+        }
+        .arxiv-kw-card-links a:hover {
+            border-bottom-color: currentColor;
+        }
+        .arxiv-kw-highlight {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fdd835 100%);
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-weight: 500;
+        }
+        .arxiv-kw-inspire-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            margin-left: 4px;
+            margin-right: 4px;
+            border-radius: 50%;
+            font-size: 9px;
+            line-height: 1;
+            font-weight: 700;
+            text-decoration: none;
+            color: #fff !important;
+            background: #0f4aa2;
+            border: 1px solid rgba(15,74,162,0.35);
+            vertical-align: middle;
+            opacity: 0.92;
+            transition: transform 0.12s ease, opacity 0.12s ease;
+        }
+        .arxiv-kw-inspire-btn:hover {
+            opacity: 1;
+            transform: translateY(-1px);
+        }
+        .arxiv-kw-dark .arxiv-kw-inspire-btn {
+            background: #9ec5ff;
+            color: #101113 !important;
+            border-color: rgba(158,197,255,0.45);
+        }
         .arxiv-kw-pinned {
             border-left: 4px solid #e74c3c !important;
             background: linear-gradient(90deg, #fef9e7 0%, transparent 30%) !important;
             padding-left: 8px !important;
             transition: background 0.3s ease;
         }
-        .arxiv-kw-pinned dt {
-            border-bottom: 1px dashed #e74c3c44;
+        .arxiv-kw-filter-hidden {
+            display: none !important;
         }
-        .arxiv-kw-highlight {
-            background-color: #ffeaa7 !important;
-            border-radius: 2px;
-            padding: 0 2px;
+        .arxiv-kw-global-list {
+            margin: 0;
+            padding: 0;
         }
-        .arxiv-kw-bar {
-            position: sticky;
-            top: 0;
-            z-index: 9999;
-            background: #2c3e50;
-            color: #ecf0f1;
-            padding: 10px 16px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
-        .arxiv-kw-bar input[type="text"] {
-            flex: 1;
-            min-width: 200px;
-            padding: 6px 10px;
-            border: 1px solid #7f8c8d;
-            border-radius: 4px;
-            font-size: 14px;
-            background: #ecf0f1;
-            color: #2c3e50;
-        }
-        .arxiv-kw-bar input[type="text"]:focus {
-            outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 4px #3498db88;
-        }
-        .arxiv-kw-bar button {
-            padding: 6px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            transition: background 0.2s;
-        }
-        .arxiv-kw-btn-apply {
-            background: #3498db;
-            color: white;
-        }
-        .arxiv-kw-btn-apply:hover { background: #2980b9; }
-        .arxiv-kw-btn-clear {
-            background: #e74c3c;
-            color: white;
-        }
-        .arxiv-kw-btn-clear:hover { background: #c0392b; }
-        .arxiv-kw-btn-config {
-            background: #27ae60;
-            color: white;
-        }
-        .arxiv-kw-btn-config:hover { background: #219a52; }
-        .arxiv-kw-bar label {
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            user-select: none;
-        }
-        .arxiv-kw-bar label input[type="checkbox"] {
-            width: 15px;
-            height: 15px;
-            cursor: pointer;
-        }
-        .arxiv-kw-count {
-            font-size: 12px;
-            color: #f39c12;
-            font-weight: 600;
-        }
-        .arxiv-kw-modal-overlay {
+        .arxiv-kw-float-btn {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 10000;
+            z-index: 9998;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #4a4a4a 0%, #2d2d2d 100%);
+            color: #fff;
+            border: none;
+            cursor: move;
+            font-size: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 0 0 2px rgba(255,255,255,0.1);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            user-select: none;
         }
-        .arxiv-kw-modal {
-            background: white;
-            border-radius: 8px;
-            padding: 24px;
-            width: 520px;
-            max-width: 90vw;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        .arxiv-kw-float-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.4), 0 0 0 3px rgba(255,255,255,0.15);
         }
-        .arxiv-kw-modal h3 {
-            margin: 0 0 12px 0;
-            color: #2c3e50;
-            font-size: 18px;
+        .arxiv-kw-float-btn.active {
+            background: linear-gradient(145deg, #667eea 0%, #764ba2 100%);
         }
-        .arxiv-kw-modal textarea {
-            width: 100%;
-            min-height: 120px;
-            padding: 10px;
-            border: 1px solid #bdc3c7;
-            border-radius: 4px;
+        .arxiv-kw-float-panel {
+            position: fixed;
+            z-index: 9999;
+            width: 340px;
+            background: linear-gradient(145deg, #3d3d3d 0%, #2a2a2a 100%);
+            border-radius: 16px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.08);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(-8px) scale(0.96);
+            pointer-events: none;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .arxiv-kw-float-panel.open {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+        .arxiv-kw-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            background: linear-gradient(90deg, rgba(102,126,234,0.3) 0%, rgba(118,75,162,0.3) 100%);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .arxiv-kw-panel-title {
             font-size: 13px;
-            font-family: monospace;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .arxiv-kw-panel-close {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        .arxiv-kw-panel-close:hover {
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }
+        .arxiv-kw-panel-body {
+            padding: 16px;
+        }
+        .arxiv-kw-panel-hint {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        .arxiv-kw-panel-textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px 12px;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            font-size: 12px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            background: rgba(0,0,0,0.3);
+            color: #e0e0e0;
             resize: vertical;
             box-sizing: border-box;
+            transition: all 0.25s ease;
         }
-        .arxiv-kw-modal textarea:focus {
+        .arxiv-kw-panel-textarea:focus {
             outline: none;
-            border-color: #3498db;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
         }
-        .arxiv-kw-modal .modal-hint {
-            font-size: 12px;
-            color: #7f8c8d;
-            margin: 6px 0 14px 0;
-            line-height: 1.6;
+        .arxiv-kw-panel-textarea::placeholder {
+            color: #666;
         }
-        .arxiv-kw-modal .modal-actions {
+        .arxiv-kw-panel-options {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .arxiv-kw-panel-options label {
+            font-size: 11px;
+            color: #bbb;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.06);
+            padding: 5px 10px;
+            border-radius: 20px;
+            transition: all 0.2s ease;
+        }
+        .arxiv-kw-panel-options label:hover {
+            background: rgba(255,255,255,0.12);
+        }
+        .arxiv-kw-panel-options input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+        .arxiv-kw-panel-footer {
             display: flex;
             gap: 10px;
-            justify-content: flex-end;
+            margin-top: 14px;
+        }
+        .arxiv-kw-panel-footer button {
+            flex: 1;
+            padding: 9px 14px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.25s ease;
+        }
+        .arxiv-kw-btn-save {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .arxiv-kw-btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(102, 126, 234, 0.5);
+        }
+        .arxiv-kw-btn-reset {
+            background: rgba(255,255,255,0.08);
+            color: #aaa;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .arxiv-kw-btn-reset:hover {
+            background: rgba(255,255,255,0.14);
+            color: #fff;
+        }
+        .arxiv-kw-count-badge {
+            position: fixed;
+            z-index: 9997;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 20px;
+            box-shadow: 0 2px 10px rgba(17, 153, 142, 0.4);
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+        .arxiv-kw-count-badge.visible {
+            opacity: 1;
+            transform: scale(1);
         }
         .arxiv-kw-section-label {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            background: #e74c3c;
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
             color: white;
             font-size: 11px;
             font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 3px;
+            padding: 3px 10px;
+            border-radius: 12px;
             margin-left: 6px;
+            box-shadow: 0 2px 8px rgba(235, 51, 73, 0.3);
         }
         .arxiv-kw-loading {
-            font-size: 13px;
-            color: #f39c12;
-            font-weight: 600;
+            font-size: 11px;
+            color: #888;
+            font-weight: 500;
+            margin-top: 6px;
+            text-align: center;
+        }
+        /* 深色模式 */
+        .arxiv-kw-dark {
+            background: #1a1a1a !important;
+        }
+        .arxiv-kw-dark #header,
+        .arxiv-kw-dark #content,
+        .arxiv-kw-dark #content-inner,
+        .arxiv-kw-dark #dlpage,
+        .arxiv-kw-dark #dlpage h1,
+        .arxiv-kw-dark #dlpage h2,
+        .arxiv-kw-dark #dlpage h3,
+        .arxiv-kw-dark #dlpage h4,
+        .arxiv-kw-dark #dlpage p,
+        .arxiv-kw-dark #dlpage li,
+        .arxiv-kw-dark #dlpage strong,
+        .arxiv-kw-dark #dlpage b,
+        .arxiv-kw-dark #dlpage small,
+        .arxiv-kw-dark #dlpage dt,
+        .arxiv-kw-dark #dlpage dd {
+            color: #f2f2f2 !important;
+        }
+        .arxiv-kw-dark #dlpage a,
+        .arxiv-kw-dark #content a {
+            color: #9ec5ff !important;
+        }
+        .arxiv-kw-dark #dlpage hr,
+        .arxiv-kw-dark #dlpage .divider {
+            border-color: rgba(255,255,255,0.18) !important;
+        }
+        .arxiv-kw-dark .arxiv-kw-article-card {
+            background: #252525;
+            border-color: rgba(255,255,255,0.1);
+        }
+        .arxiv-kw-dark .arxiv-kw-article-card:hover {
+            background: #2a2a2a;
+            border-color: rgba(255,255,255,0.15);
+        }
+        .arxiv-kw-dark .arxiv-kw-article-card.pinned {
+            background: linear-gradient(90deg, rgba(231,76,60,0.22) 0%, #252525 30%);
+            border-left-color: #e74c3c;
+        }
+        .arxiv-kw-dark .arxiv-kw-card-links {
+            border-top-color: rgba(255,255,255,0.12);
+        }
+        .arxiv-kw-dark .arxiv-kw-card-links a {
+            color: #fff !important;
+            border-bottom-color: rgba(255,255,255,0.45);
+        }
+        .arxiv-kw-dark .arxiv-kw-article-card mjx-container,
+        .arxiv-kw-dark .arxiv-kw-article-card .MathJax {
+            color: #fff !important;
+        }
+        .arxiv-kw-dark .arxiv-kw-article-card,
+        .arxiv-kw-dark .arxiv-kw-article-card * {
+            color: #fff !important;
+        }
+        .arxiv-kw-dark .arxiv-kw-highlight {
+            color: #111 !important;
+        }
+        .arxiv-kw-dark .arxiv-kw-card-container {
+            background: #1a1a1a;
+        }
+        .arxiv-kw-dark .arxiv-kw-separator {
+            border-top-color: rgba(255,255,255,0.1) !important;
+        }
+        .arxiv-kw-dark .arxiv-kw-separator span {
+            background: #252525 !important;
+            color: #fff !important;
+        }
+        .arxiv-kw-dark .arxiv-kw-matched-header {
+            background: linear-gradient(135deg, rgba(244,114,114,0.15) 0%, rgba(102,126,234,0.15)) !important;
+            border-color: rgba(244,114,114,0.25) !important;
+        }
+        .arxiv-kw-dark .arxiv-kw-matched-header span {
+            color: #fff !important;
         }
     `);
 
@@ -183,6 +439,12 @@
     const STORAGE_KEY = 'arxiv_kw_keywords';
     const CASE_KEY = 'arxiv_kw_case_sensitive';
     const REGEX_KEY = 'arxiv_kw_regex_mode';
+    const COLS_KEY = 'arxiv_kw_cols';
+    const DARK_KEY = 'arxiv_kw_dark';
+    const CARD_KEY = 'arxiv_kw_card_mode';
+    const MATHJAX_SCRIPT_ID = 'arxiv-kw-mathjax-script';
+    const MATHJAX_SRC = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js';
+    let mathJaxReadyPromise = null;
 
     function loadKeywords() {
         const raw = GM_getValue(STORAGE_KEY, '');
@@ -207,6 +469,143 @@
 
     function setRegexMode(val) {
         GM_setValue(REGEX_KEY, val);
+    }
+
+    function getColumns() {
+        return GM_getValue(COLS_KEY, 1);
+    }
+
+    function setColumns(val) {
+        GM_setValue(COLS_KEY, val);
+    }
+
+    function isDarkMode() {
+        return GM_getValue(DARK_KEY, false);
+    }
+
+    function setDarkMode(val) {
+        GM_setValue(DARK_KEY, val);
+    }
+
+    function isCardMode() {
+        return GM_getValue(CARD_KEY, true);
+    }
+
+    function setCardMode(val) {
+        GM_setValue(CARD_KEY, val);
+    }
+
+    function syncDarkClass() {
+        if (isDarkMode() && isCardMode()) {
+            document.body.classList.add('arxiv-kw-dark');
+        } else {
+            document.body.classList.remove('arxiv-kw-dark');
+        }
+    }
+
+    function ensureMathJaxReady() {
+        const existing = window.MathJax;
+
+        // MathJax v3 已可用
+        if (existing && typeof existing.typesetPromise === 'function') {
+            return Promise.resolve(existing);
+        }
+
+        // MathJax v2 已可用
+        if (existing && existing.Hub && typeof existing.Hub.Queue === 'function') {
+            return Promise.resolve(existing);
+        }
+
+        if (mathJaxReadyPromise) {
+            return mathJaxReadyPromise;
+        }
+
+        mathJaxReadyPromise = new Promise((resolve) => {
+            // 配置 v3（如果页面没有自己的配置）
+            if (!window.MathJax || !window.MathJax.Hub) {
+                window.MathJax = window.MathJax || {};
+                if (!window.MathJax.tex) {
+                    window.MathJax.tex = {
+                        inlineMath: [['\\(', '\\)'], ['$', '$']],
+                        displayMath: [['\\[', '\\]'], ['$$', '$$']],
+                        processEscapes: true
+                    };
+                }
+                if (!window.MathJax.options) {
+                    window.MathJax.options = {
+                        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+                    };
+                }
+                window.MathJax.startup = Object.assign({}, window.MathJax.startup, { typeset: false });
+            }
+
+            let script = document.getElementById(MATHJAX_SCRIPT_ID);
+            if (!script) {
+                script = document.createElement('script');
+                script.id = MATHJAX_SCRIPT_ID;
+                script.src = MATHJAX_SRC;
+                script.async = true;
+                script.onload = () => {
+                    const mj = window.MathJax;
+                    if (mj && mj.startup && mj.startup.promise && typeof mj.startup.promise.then === 'function') {
+                        mj.startup.promise.then(() => resolve(mj)).catch(() => resolve(mj));
+                    } else {
+                        resolve(mj || null);
+                    }
+                };
+                script.onerror = () => {
+                    console.warn('[arXiv-KW] MathJax 加载失败，公式将保持原始文本显示');
+                    resolve(null);
+                };
+                document.head.appendChild(script);
+            } else {
+                const mj = window.MathJax;
+                if (mj && mj.startup && mj.startup.promise && typeof mj.startup.promise.then === 'function') {
+                    mj.startup.promise.then(() => resolve(mj)).catch(() => resolve(mj));
+                } else {
+                    resolve(mj || null);
+                }
+            }
+        });
+
+        return mathJaxReadyPromise;
+    }
+
+    async function typesetMathInElement(root) {
+        if (!root) return;
+        if (hasRenderedMath(root)) return;
+        if (!hasRawTeX(root)) return;
+
+        const mj = await ensureMathJaxReady();
+        if (!mj) return;
+
+        try {
+            if (typeof mj.typesetClear === 'function') {
+                mj.typesetClear([root]);
+            }
+            if (typeof mj.typesetPromise === 'function') {
+                await mj.typesetPromise([root]);
+                return;
+            }
+            if (mj.Hub && typeof mj.Hub.Queue === 'function') {
+                await new Promise((resolve) => {
+                    mj.Hub.Queue(['Typeset', mj.Hub, root], resolve);
+                });
+            }
+        } catch (err) {
+            console.warn('[arXiv-KW] MathJax 排版失败:', err);
+        }
+    }
+
+    function hasRenderedMath(root) {
+        if (!root) return false;
+        return !!root.querySelector('mjx-container, .MathJax, .MathJax_Display, .MathJax_SVG, [id^="MathJax-Element-"]');
+    }
+
+    function hasRawTeX(root) {
+        if (!root) return false;
+        const text = root.textContent || '';
+        return /\\\(|\\\)|\\\[|\\\]|\\begin\{|\\end\{|\$\$|\\frac|\\sum|\\int|\\alpha|\\beta|\\gamma|\\delta/.test(text);
     }
 
     // ==================== 匹配逻辑 ====================
@@ -429,15 +828,17 @@
 
     // ==================== 核心排序逻辑 ====================
     async function processList() {
+        const cardMode = isCardMode();
+        if (!cardMode && !loadKeywords().length) {
+            restoreOriginal();
+            syncDarkClass();
+            return;
+        }
+
         const keywords = loadKeywords();
         const caseSensitive = isCaseSensitive();
         const regexMode = isRegexMode();
         const matchers = buildMatchers(keywords, caseSensitive, regexMode);
-
-        if (matchers.length === 0) {
-            restoreOriginal();
-            return;
-        }
 
         // 显示处理状态
         updateStatus('正在展开摘要...');
@@ -445,68 +846,86 @@
         // 先尝试展开页面上的摘要
         await expandAllAbstracts();
 
-        // 收集所有 dt-dd 对
-        const dl = findArticleList();
-        if (!dl) {
+        // 收集所有分段 dl
+        const dls = findArticleLists();
+        if (dls.length === 0) {
             console.warn('[arXiv-KW] 未找到文章列表');
             updateStatus('');
             return;
         }
 
-        const pairs = collectPairs(dl);
-        if (pairs.length === 0) {
+        const sectionEntries = [];
+        const allPairs = [];
+        for (let i = 0; i < dls.length; i++) {
+            const dl = dls[i];
+            const pairs = collectPairs(dl);
+            sectionEntries.push({ dl, pairs, sectionIndex: i });
+            allPairs.push(...pairs);
+        }
+
+        if (allPairs.length === 0) {
             updateStatus('');
             return;
         }
 
         // 对缺失摘要的文章异步获取
         updateStatus('正在加载摘要...');
-        await fetchMissingAbstracts(pairs);
+        await fetchMissingAbstracts(allPairs);
 
-        updateStatus('正在匹配关键词...');
+        updateStatus(matchers.length > 0 ? '正在匹配关键词...' : '正在整理卡片...');
 
-        // 对每个 pair 做匹配
-        const matched = [];
-        const unmatched = [];
+        let totalMatched = 0;
+        const matchedAll = [];
+        const unmatchedAll = [];
 
-        for (const pair of pairs) {
-            const titleEl = pair.dd.querySelector('.list-title');
-            const authorsEl = pair.dd.querySelector('.list-authors');
-            const abstractEl = pair.dd.querySelector('.mathjax, .abstract-text');
+        for (const section of sectionEntries) {
+            const matched = [];
+            const unmatched = [];
 
-            const title = titleEl ? titleEl.textContent.replace(/^Title\s*:?\s*/i, '').trim() : '';
-            const authors = authorsEl ? authorsEl.textContent.replace(/^Authors\s*:?\s*/i, '').trim() : '';
-            const abstract = abstractEl ? abstractEl.textContent.replace(/^Abstract\s*:?\s*/i, '').trim() : '';
+            for (const pair of section.pairs) {
+                const titleEl = pair.dd.querySelector('.list-title');
+                const authorsEl = pair.dd.querySelector('.list-authors');
+                const abstractEl = pair.dd.querySelector('.mathjax, .abstract-text');
 
-            const fullText = `${title} ${authors} ${abstract}`;
-            const hits = matchText(fullText, matchers);
+                const title = titleEl ? titleEl.textContent.replace(/^Title\s*:?\s*/i, '').trim() : '';
+                const authors = authorsEl ? authorsEl.textContent.replace(/^Authors\s*:?\s*/i, '').trim() : '';
+                const abstract = abstractEl ? abstractEl.textContent.replace(/^Abstract\s*:?\s*/i, '').trim() : '';
 
-            if (hits.length > 0) {
-                matched.push({ ...pair, hits });
-            } else {
-                unmatched.push(pair);
+                const fullText = `${title} ${authors} ${abstract}`;
+                const hits = matchers.length > 0 ? matchText(fullText, matchers) : [];
+
+                if (hits.length > 0) {
+                    matched.push({ ...pair, hits });
+                } else {
+                    unmatched.push(pair);
+                }
             }
+
+            totalMatched += matched.length;
+            matchedAll.push(...matched);
+            unmatchedAll.push(...unmatched);
         }
 
-        // 重新排列 DOM
-        rearrangeDOM(dl, matched, unmatched, matchers);
-        updateCount(matched.length, pairs.length);
+        if (cardMode) {
+            // 全局统一重排：所有命中在最前，然后是全部未命中
+            const mathRootsToTypeset = rearrangeDOM(sectionEntries, matchedAll, unmatchedAll, matchers);
+
+            // 只对未渲染过的 TeX 区域做排版，避免重复排版导致叠字
+            await Promise.all(mathRootsToTypeset.map(async (el) => {
+                await typesetMathInElement(el);
+                delete el.dataset.arxivKwNeedsTypeset;
+            }));
+        } else {
+            // 非卡片模式也做全局统一重排
+            rearrangeListDOM(sectionEntries, matchedAll, unmatchedAll, matchers);
+        }
+
+        updateCount(totalMatched, allPairs.length);
     }
 
-    function findArticleList() {
-        // 优先找 #articles
-        let dl = document.querySelector('dl#articles');
-        if (dl) return dl;
-
-        // 回退：找包含 arXiv 条目的大 dl
-        const allDl = document.querySelectorAll('dl');
-        for (const d of allDl) {
-            if (d.querySelector('dt a[href*="/abs/"]')) {
-                dl = d;
-                break;
-            }
-        }
-        return dl;
+    function findArticleLists() {
+        const allDl = Array.from(document.querySelectorAll('dl'));
+        return allDl.filter(d => !d.classList.contains('arxiv-kw-global-list') && d.querySelector('dt a[href*="/abs/"]'));
     }
 
     function collectPairs(dl) {
@@ -518,86 +937,244 @@
             if (el.tagName === 'DT') {
                 currentDt = el;
             } else if (el.tagName === 'DD' && currentDt) {
-                pairs.push({ dt: currentDt, dd: el });
+                if (currentDt.querySelector('a[href*="/abs/"]')) {
+                    pairs.push({ dt: currentDt, dd: el });
+                }
                 currentDt = null;
             }
         }
         return pairs;
     }
 
-    function rearrangeDOM(dl, matched, unmatched, matchers) {
-        // 保存原始顺序标记
-        if (!dl.dataset.arxivKwOriginal) {
-            dl.dataset.arxivKwOriginal = '1';
+    function createArticleCard(pair, isPinned, matchers) {
+        const card = document.createElement('article');
+        card.className = 'arxiv-kw-article-card' + (isPinned ? ' pinned' : '');
+
+        const body = document.createElement('div');
+        body.className = 'arxiv-kw-card-body';
+        body.innerHTML = pair.dd.innerHTML;
+        expandAbstractInNode(body);
+        if (!hasRenderedMath(body) && hasRawTeX(body)) {
+            body.dataset.arxivKwNeedsTypeset = '1';
         }
 
-        // 清空 dl
-        while (dl.firstChild) {
-            dl.removeChild(dl.firstChild);
+        if (isPinned) {
+            // 仅在非公式字段中高亮，避免破坏 TeX 语法
+            const highlightTargets = body.querySelectorAll('.list-title, .list-authors, .list-comments, .list-subjects');
+            highlightTargets.forEach(target => highlightElement(target, matchers));
+        }
+        addInspireAuthorButtons(body);
+
+        card.appendChild(body);
+
+        const linkRow = createCardLinkRow(pair.dt);
+        if (linkRow.childElementCount > 0) {
+            card.appendChild(linkRow);
         }
 
-        const keywordList = matchers.map(m => m.source);
-
-        // 匹配区标题
-        if (matched.length > 0) {
-            const separatorDt = document.createElement('dt');
-            separatorDt.innerHTML = `<span class="arxiv-kw-section-label">⭐ 关键词匹配</span> 命中 ${matched.length} 篇 — 关键词: "${keywordList.join(', ')}"`;
-            separatorDt.style.cssText = 'padding: 8px 0; font-size: 14px; background: #fef9e7;';
-            dl.appendChild(separatorDt);
-            const spacerDd = document.createElement('dd');
-            spacerDd.style.display = 'none';
-            dl.appendChild(spacerDd);
-        }
-
-        // 放置匹配的文章
-        for (const pair of matched) {
-            pair.dt.classList.add('arxiv-kw-pinned');
-            pair.dd.classList.add('arxiv-kw-pinned');
-            dl.appendChild(pair.dt);
-            dl.appendChild(pair.dd);
-            highlightElement(pair.dd, matchers);
-        }
-
-        // 分隔线
-        if (matched.length > 0 && unmatched.length > 0) {
-            const sepDt2 = document.createElement('dt');
-            sepDt2.innerHTML = `<span style="color:#7f8c8d; font-size:13px;">——— 以下为未匹配文章 (${unmatched.length} 篇) ———</span>`;
-            sepDt2.style.cssText = 'padding: 10px 0; border-top: 2px solid #bdc3c7;';
-            dl.appendChild(sepDt2);
-            const spacerDd2 = document.createElement('dd');
-            spacerDd2.style.display = 'none';
-            dl.appendChild(spacerDd2);
-        }
-
-        // 放置未匹配的文章
-        for (const pair of unmatched) {
-            pair.dt.classList.remove('arxiv-kw-pinned');
-            pair.dd.classList.remove('arxiv-kw-pinned');
-            dl.appendChild(pair.dt);
-            dl.appendChild(pair.dd);
-        }
+        return card;
     }
 
-    function restoreOriginal() {
-        document.querySelectorAll('.arxiv-kw-pinned').forEach(el => el.classList.remove('arxiv-kw-pinned'));
-        document.querySelectorAll('.arxiv-kw-highlight').forEach(el => {
+    function rearrangeDOM(sectionEntries, matched, unmatched, matchers) {
+        document.querySelectorAll('.arxiv-kw-card-container').forEach(container => container.remove());
+        document.querySelectorAll('.arxiv-kw-global-list').forEach(dl => dl.remove());
+
+        for (const section of sectionEntries) {
+            section.dl.style.display = 'none';
+            if (!section.dl.dataset.arxivKwOriginal) {
+                section.dl.dataset.arxivKwOriginal = '1';
+            }
+        }
+
+        const anchorDl = sectionEntries[0]?.dl;
+        if (!anchorDl) return [];
+
+        const container = document.createElement('div');
+        const cols = getColumns();
+        const isDark = isDarkMode();
+        container.className = 'arxiv-kw-card-container' + (isDark ? ' arxiv-kw-dark' : '');
+        container.style.cssText = `padding: 20px; max-width: ${cols > 1 ? '100%' : '800px'}; margin: 0 auto;`;
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = cols > 1 ? `repeat(${cols}, 1fr)` : '1fr';
+        container.style.gap = '16px';
+        anchorDl.parentNode.insertBefore(container, anchorDl);
+
+        for (const pair of matched) {
+            container.appendChild(createArticleCard(pair, true, matchers));
+        }
+        for (const pair of unmatched) {
+            container.appendChild(createArticleCard(pair, false, matchers));
+        }
+
+        return Array.from(container.querySelectorAll('.arxiv-kw-card-body[data-arxiv-kw-needs-typeset="1"]'));
+    }
+
+    function clearHighlightsInNode(root) {
+        if (!root) return;
+        root.querySelectorAll('.arxiv-kw-highlight').forEach(el => {
             const text = document.createTextNode(el.textContent);
             el.parentNode.replaceChild(text, el);
         });
+    }
+
+    function buildInspireAuthorUrl(authorName) {
+        return `https://inspirehep.net/authors?q=${encodeURIComponent(authorName)}`;
+    }
+
+    function addInspireAuthorButtons(root) {
+        if (!root) return;
+        const authorLinks = root.querySelectorAll('.list-authors a[href]');
+        authorLinks.forEach(link => {
+            if (link.nextElementSibling && link.nextElementSibling.classList.contains('arxiv-kw-inspire-btn')) {
+                return;
+            }
+            const rawName = (link.textContent || '').replace(/\s+/g, ' ').trim();
+            const name = rawName.replace(/,\s*$/, '');
+            if (!name) return;
+
+            const btn = document.createElement('a');
+            btn.className = 'arxiv-kw-inspire-btn';
+            btn.href = buildInspireAuthorUrl(name);
+            btn.target = '_blank';
+            btn.rel = 'noopener noreferrer';
+            btn.title = `在 INSPIRE 搜索作者: ${name}`;
+            btn.textContent = 'I';
+
+            link.insertAdjacentElement('afterend', btn);
+        });
+    }
+
+    function rearrangeListDOM(sectionEntries, matched, unmatched, matchers) {
+        document.querySelectorAll('.arxiv-kw-card-container').forEach(container => container.remove());
+        document.querySelectorAll('.arxiv-kw-global-list').forEach(dl => dl.remove());
+
+        for (const section of sectionEntries) {
+            section.dl.style.display = 'none';
+            if (!section.dl.dataset.arxivKwOriginal) {
+                section.dl.dataset.arxivKwOriginal = '1';
+            }
+        }
+
+        const anchorDl = sectionEntries[0]?.dl;
+        if (!anchorDl) return;
+
+        const globalDl = document.createElement('dl');
+        globalDl.className = `arxiv-kw-global-list ${anchorDl.className || ''}`.trim();
+        anchorDl.parentNode.insertBefore(globalDl, anchorDl);
+
+        function appendPair(pair, isPinned) {
+            const dt = pair.dt.cloneNode(true);
+            const dd = pair.dd.cloneNode(true);
+
+            dt.classList.remove('arxiv-kw-filter-hidden');
+            dd.classList.remove('arxiv-kw-filter-hidden');
+
+            if (isPinned) {
+                dt.classList.add('arxiv-kw-pinned');
+                dd.classList.add('arxiv-kw-pinned');
+                const highlightTargets = dd.querySelectorAll('.list-title, .list-authors, .list-comments, .list-subjects');
+                highlightTargets.forEach(target => highlightElement(target, matchers));
+            } else {
+                dt.classList.remove('arxiv-kw-pinned');
+                dd.classList.remove('arxiv-kw-pinned');
+            }
+            addInspireAuthorButtons(dd);
+
+            globalDl.appendChild(dt);
+            globalDl.appendChild(dd);
+        }
+
+        for (const pair of matched) appendPair(pair, true);
+        for (const pair of unmatched) appendPair(pair, false);
+    }
+
+    function normalizeCardLinkHref(rawHref) {
+        if (!rawHref) return '';
+        if (rawHref.startsWith('http://') || rawHref.startsWith('https://')) return rawHref;
+        if (rawHref.startsWith('//')) return window.location.protocol + rawHref;
+        if (rawHref.startsWith('/')) return window.location.origin + rawHref;
+        return new URL(rawHref, window.location.href).href;
+    }
+
+    function createCardLinkRow(dtNode) {
+        const row = document.createElement('div');
+        row.className = 'arxiv-kw-card-links';
+
+        const identifier = dtNode.querySelector('.list-identifier');
+        const linkNodes = identifier
+            ? Array.from(identifier.querySelectorAll('a[href]'))
+            : Array.from(dtNode.querySelectorAll('a[href]'));
+
+        const seen = new Set();
+        for (const linkNode of linkNodes) {
+            const href = normalizeCardLinkHref(linkNode.getAttribute('href'));
+            const label = (linkNode.textContent || '').replace(/\s+/g, ' ').trim()
+                || (linkNode.getAttribute('title') || '').trim()
+                || 'link';
+
+            if (!href) continue;
+            const dedupeKey = `${label}|${href}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+
+            const link = document.createElement('a');
+            link.href = href;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = label;
+            row.appendChild(link);
+        }
+
+        return row;
+    }
+
+    function expandAbstractInNode(root) {
+        if (!root) return;
+
+        root.querySelectorAll('.mathjax, .abstract-text, .abstract, .abstract-long, .abstract-full, .abstract-collapse, .collapse').forEach(el => {
+            el.hidden = false;
+            if (el.style.display === 'none') {
+                el.style.display = '';
+            }
+            el.classList.remove('hidden', 'is-hidden');
+        });
+
+        root.querySelectorAll('.abstract-short').forEach(shortEl => {
+            const hasLong = shortEl.parentElement?.querySelector('.mathjax, .abstract-text, .abstract, .abstract-long, .abstract-full');
+            if (hasLong) {
+                shortEl.style.display = 'none';
+            }
+        });
+
+        root.querySelectorAll('a[onclick*="toggle"], a.toggle, .abstract-toggle').forEach(toggleEl => {
+            toggleEl.remove();
+        });
+    }
+
+    function restoreOriginal() {
+        // 移除所有卡片容器，恢复原始 dl
+        document.querySelectorAll('.arxiv-kw-card-container').forEach(container => container.remove());
+        document.querySelectorAll('.arxiv-kw-global-list').forEach(dl => dl.remove());
+        findArticleLists().forEach(dl => {
+            dl.style.display = '';
+            delete dl.dataset.arxivKwOriginal;
+            delete dl.dataset.arxivKwSectionKey;
+        });
+
+        document.querySelectorAll('.arxiv-kw-pinned').forEach(el => el.classList.remove('arxiv-kw-pinned'));
+        clearHighlightsInNode(document.body);
+        document.querySelectorAll('.arxiv-kw-filter-hidden').forEach(el => el.classList.remove('arxiv-kw-filter-hidden'));
+        document.querySelectorAll('.arxiv-kw-injected-row').forEach(el => el.remove());
         document.querySelectorAll('.arxiv-kw-section-label').forEach(el => {
             el.closest('dt')?.remove();
         });
-        const countEl = document.querySelector('.arxiv-kw-count');
-        if (countEl) countEl.textContent = '';
+        document.querySelector('.arxiv-kw-count-badge')?.classList.remove('visible');
         const statusEl = document.querySelector('.arxiv-kw-loading');
         if (statusEl) statusEl.textContent = '';
     }
 
     function updateCount(matched, total) {
-        const countEl = document.querySelector('.arxiv-kw-count');
-        if (countEl) {
-            countEl.textContent = `${matched} / ${total} 篇命中`;
-        }
+        updateCountBadge(matched, total);
         const statusEl = document.querySelector('.arxiv-kw-loading');
         if (statusEl) statusEl.textContent = '';
     }
@@ -608,128 +1185,297 @@
     }
 
     // ==================== UI 构建 ====================
-    function createToolbar() {
-        if (document.querySelector('.arxiv-kw-bar')) return;
+    const BTN_POS_KEY = 'arxiv_kw_btn_pos';
+    let isPanelOpen = false;
+    let isDraggingBtn = false;
+    let dragOffset = { x: 0, y: 0 };
+    let settingsReloadTimer = null;
 
-        const bar = document.createElement('div');
-        bar.className = 'arxiv-kw-bar';
-
-        bar.innerHTML = `
-            <span style="font-weight:700; white-space:nowrap;">🏷️ 关键词:</span>
-            <input type="text" class="arxiv-kw-input" placeholder="输入关键词，空格分隔（如：axion dark matter）" value="" />
-            <button class="arxiv-kw-btn-apply" title="应用关键词排序">应用</button>
-            <button class="arxiv-kw-btn-clear" title="清除所有关键词">清除</button>
-            <button class="arxiv-kw-btn-config" title="高级配置（每行一个关键词、正则等）">⚙ 配置</button>
-            <label><input type="checkbox" class="arxiv-kw-case" /> 区分大小写</label>
-            <label><input type="checkbox" class="arxiv-kw-regex" /> 正则模式</label>
-            <span class="arxiv-kw-count"></span>
-            <span class="arxiv-kw-loading"></span>
-        `;
-
-        document.body.prepend(bar);
-
-        const input = bar.querySelector('.arxiv-kw-input');
-        const applyBtn = bar.querySelector('.arxiv-kw-btn-apply');
-        const clearBtn = bar.querySelector('.arxiv-kw-btn-clear');
-        const configBtn = bar.querySelector('.arxiv-kw-btn-config');
-        const caseCb = bar.querySelector('.arxiv-kw-case');
-        const regexCb = bar.querySelector('.arxiv-kw-regex');
-
-        const apply = () => {
-            const text = input.value.trim();
-            const kws = text.split(/[\s,;，；]+/).filter(k => k.length > 0);
-            saveKeywords(kws);
-            processList();
-        };
-
-        applyBtn.addEventListener('click', apply);
-        input.addEventListener('keydown', e => {
-            if (e.key === 'Enter') apply();
-        });
-
-        clearBtn.addEventListener('click', () => {
-            input.value = '';
-            saveKeywords([]);
-            restoreOriginal();
-            processList();
-        });
-
-        caseCb.addEventListener('change', () => {
-            setCaseSensitive(caseCb.checked);
-            processList();
-        });
-
-        regexCb.addEventListener('change', () => {
-            setRegexMode(regexCb.checked);
-            processList();
-        });
-
-        configBtn.addEventListener('click', showConfigModal);
+    function refreshPageSoon() {
+        if (settingsReloadTimer) {
+            clearTimeout(settingsReloadTimer);
+        }
+        updateStatus('设置已更新，正在刷新...');
+        settingsReloadTimer = setTimeout(() => {
+            window.location.reload();
+        }, 120);
     }
 
-    function showConfigModal() {
-        document.querySelector('.arxiv-kw-modal-overlay')?.remove();
+    function getSavedBtnPos() {
+        const pos = GM_getValue(BTN_POS_KEY, null);
+        if (pos) return pos;
+        return { right: 16, top: 16 };
+    }
 
-        const overlay = document.createElement('div');
-        overlay.className = 'arxiv-kw-modal-overlay';
+    function saveBtnPos(pos) {
+        GM_setValue(BTN_POS_KEY, pos);
+    }
 
-        const keywords = loadKeywords();
-        const caseSensitive = isCaseSensitive();
-        const regexMode = isRegexMode();
+    function createFloatButton() {
+        if (document.querySelector('.arxiv-kw-float-btn')) return;
 
-        overlay.innerHTML = `
-            <div class="arxiv-kw-modal">
-                <h3>⚙ 高级关键词配置</h3>
-                <p class="modal-hint">
-                    每行一个关键词，匹配范围包括标题、作者、摘要。<br/>
-                    正则模式下每行是一个正则表达式。<br/>
-                    <strong>示例：</strong><br/>
-                    axion<br/>
-                    dark matter<br/>
-                    gravitational wave<br/>
-                    Wilson coefficient<br/>
-                    ^(muon|mu) collider  <em>← 正则模式</em>
+        const btn = document.createElement('button');
+        btn.className = 'arxiv-kw-float-btn';
+        btn.innerHTML = '⚙';
+        btn.title = '拖动调整位置，点击打开配置';
+        document.body.appendChild(btn);
+
+        // 设置初始位置
+        const pos = getSavedBtnPos();
+        btn.style.right = pos.right + 'px';
+        btn.style.top = pos.top + 'px';
+
+        // 点击打开面板
+        btn.addEventListener('click', () => {
+            if (!isDraggingBtn) {
+                togglePanel();
+            }
+        });
+
+        // 拖动按钮
+        btn.addEventListener('mousedown', (e) => {
+            isDraggingBtn = false;
+            const rect = btn.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+            btn.style.transition = 'none';
+
+            const onMove = (e) => {
+                const dx = Math.abs(e.clientX - (rect.left + dragOffset.x));
+                const dy = Math.abs(e.clientY - (rect.top + dragOffset.y));
+                if (dx > 5 || dy > 5) isDraggingBtn = true;
+
+                if (isDraggingBtn) {
+                    const newRight = window.innerWidth - e.clientX - (rect.width - dragOffset.x);
+                    const newTop = e.clientY - dragOffset.y;
+                    btn.style.right = Math.max(0, newRight) + 'px';
+                    btn.style.top = Math.max(0, newTop) + 'px';
+                    btn.style.left = 'auto';
+                }
+            };
+
+            const onUp = () => {
+                if (isDraggingBtn) {
+                    saveBtnPos({ right: parseInt(btn.style.right), top: parseInt(btn.style.top) });
+                    updatePanelPosition();
+                }
+                isDraggingBtn = false;
+                btn.style.transition = '';
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+    }
+
+    function createFloatPanel() {
+        if (document.querySelector('.arxiv-kw-float-panel')) return;
+
+        const panel = document.createElement('div');
+        panel.className = 'arxiv-kw-float-panel';
+        document.body.appendChild(panel);
+
+        panel.innerHTML = `
+            <div class="arxiv-kw-panel-header">
+                <span class="arxiv-kw-panel-title">🏷️ 关键词配置</span>
+                <button class="arxiv-kw-panel-close">✕</button>
+            </div>
+            <div class="arxiv-kw-panel-body">
+                <p class="arxiv-kw-panel-hint">
+                    每行一个关键词，匹配标题 / 作者 / 摘要<br/>
+                    正则模式支持完整正则表达式语法
                 </p>
-                <textarea class="arxiv-kw-modal-textarea">${keywords.join('\n')}</textarea>
-                <div class="modal-hint" style="margin-top:10px;">
-                    当前模式：${regexMode ? '正则' : '普通文本'} | ${caseSensitive ? '区分大小写' : '不区分大小写'}
+                <textarea class="arxiv-kw-panel-textarea" placeholder="axion&#10;dark matter&#10;gravitational wave"></textarea>
+                <div class="arxiv-kw-panel-options">
+                    <label><input type="checkbox" class="panel-card" /> 卡片模式</label>
+                    <label><input type="checkbox" class="panel-case" /> 区分大小写</label>
+                    <label><input type="checkbox" class="panel-regex" /> 正则模式</label>
+                    <label><input type="checkbox" class="panel-dark" /> 深色模式</label>
                 </div>
-                <div class="modal-actions">
-                    <button class="arxiv-kw-btn-clear modal-cancel">取消</button>
-                    <button class="arxiv-kw-btn-apply modal-save">保存并应用</button>
+                <div style="margin-top:12px; display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:11px; color:#888;">每行:</span>
+                    <select class="panel-cols" style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:4px 8px; color:#e0e0e0; font-size:12px;">
+                        <option value="1">1 列</option>
+                        <option value="2">2 列</option>
+                        <option value="3">3 列</option>
+                        <option value="4">4 列</option>
+                        <option value="5">5 列</option>
+                    </select>
                 </div>
+                <div class="arxiv-kw-panel-footer">
+                    <button class="arxiv-kw-btn-reset">重置</button>
+                    <button class="arxiv-kw-btn-save">应用</button>
+                </div>
+                <div class="arxiv-kw-loading"></div>
             </div>
         `;
 
-        document.body.appendChild(overlay);
+        updatePanelPosition();
 
-        const textarea = overlay.querySelector('.arxiv-kw-modal-textarea');
-        const cancelBtn = overlay.querySelector('.modal-cancel');
-        const saveBtn = overlay.querySelector('.modal-save');
+        // 事件绑定
+        const closeBtn = panel.querySelector('.arxiv-kw-panel-close');
+        const saveBtn = panel.querySelector('.arxiv-kw-btn-save');
+        const resetBtn = panel.querySelector('.arxiv-kw-btn-reset');
+        const cardCb = panel.querySelector('.panel-card');
+        const caseCb = panel.querySelector('.panel-case');
+        const regexCb = panel.querySelector('.panel-regex');
+        const darkCb = panel.querySelector('.panel-dark');
+        const colsSelect = panel.querySelector('.panel-cols');
+        const textarea = panel.querySelector('.arxiv-kw-panel-textarea');
 
-        cancelBtn.addEventListener('click', () => overlay.remove());
-        overlay.addEventListener('click', e => {
-            if (e.target === overlay) overlay.remove();
-        });
+        // 初始化值
+        cardCb.checked = isCardMode();
+        caseCb.checked = isCaseSensitive();
+        regexCb.checked = isRegexMode();
+        darkCb.checked = isDarkMode();
+        colsSelect.value = getColumns();
 
+        closeBtn.addEventListener('click', () => closePanel());
         saveBtn.addEventListener('click', () => {
             const lines = textarea.value.split('\n').map(k => k.trim()).filter(k => k.length > 0);
             saveKeywords(lines);
-            const input = document.querySelector('.arxiv-kw-input');
-            if (input) input.value = lines.join(' ');
-            overlay.remove();
-            processList();
+            setCardMode(cardCb.checked);
+            setCaseSensitive(caseCb.checked);
+            setRegexMode(regexCb.checked);
+            setDarkMode(darkCb.checked);
+            setColumns(parseInt(colsSelect.value));
+            syncDarkClass();
+            closePanel();
+            refreshPageSoon();
+        });
+        resetBtn.addEventListener('click', () => {
+            textarea.value = '';
+        });
+        cardCb.addEventListener('change', () => {
+            setCardMode(cardCb.checked);
+            syncDarkClass();
+            refreshPageSoon();
+        });
+        caseCb.addEventListener('change', () => {
+            setCaseSensitive(caseCb.checked);
+            refreshPageSoon();
+        });
+        regexCb.addEventListener('change', () => {
+            setRegexMode(regexCb.checked);
+            refreshPageSoon();
+        });
+        darkCb.addEventListener('change', () => {
+            setDarkMode(darkCb.checked);
+            syncDarkClass();
+            refreshPageSoon();
+        });
+        colsSelect.addEventListener('change', () => {
+            setColumns(parseInt(colsSelect.value));
+            refreshPageSoon();
         });
 
-        textarea.focus();
+        // 点击外部关闭
+        document.addEventListener('click', (e) => {
+            if (isPanelOpen && !panel.contains(e.target) && !document.querySelector('.arxiv-kw-float-btn').contains(e.target)) {
+                closePanel();
+            }
+        });
+    }
+
+    function updatePanelPosition() {
+        const btn = document.querySelector('.arxiv-kw-float-btn');
+        const panel = document.querySelector('.arxiv-kw-float-panel');
+        if (!btn || !panel) return;
+
+        const btnRect = btn.getBoundingClientRect();
+        const panelWidth = 340;
+        const panelHeight = panel.offsetHeight || 320;
+
+        // 面板显示在按钮上方
+        let left = btnRect.right - panelWidth + btnRect.width / 2;
+        let top = btnRect.top - panelHeight - 8;
+
+        // 边界检测
+        if (left < 10) left = 10;
+        if (left + panelWidth > window.innerWidth - 10) {
+            left = window.innerWidth - panelWidth - 10;
+        }
+        if (top < 10) {
+            // 如果上方空间不够，显示在按钮下方
+            top = btnRect.bottom + 8;
+        }
+
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
+        panel.style.right = 'auto';
+    }
+
+    function togglePanel() {
+        const panel = document.querySelector('.arxiv-kw-float-panel');
+        const btn = document.querySelector('.arxiv-kw-float-btn');
+        if (!panel) return;
+
+        isPanelOpen = !isPanelOpen;
+        panel.classList.toggle('open', isPanelOpen);
+        btn.classList.toggle('active', isPanelOpen);
+
+        if (isPanelOpen) {
+            updatePanelPosition();
+            const textarea = panel.querySelector('.arxiv-kw-panel-textarea');
+            const cardCb = panel.querySelector('.panel-card');
+            const caseCb = panel.querySelector('.panel-case');
+            const regexCb = panel.querySelector('.panel-regex');
+            const darkCb = panel.querySelector('.panel-dark');
+            const colsSelect = panel.querySelector('.panel-cols');
+            textarea.value = loadKeywords().join('\n');
+            cardCb.checked = isCardMode();
+            caseCb.checked = isCaseSensitive();
+            regexCb.checked = isRegexMode();
+            darkCb.checked = isDarkMode();
+            colsSelect.value = getColumns();
+        }
+    }
+
+    function closePanel() {
+        const panel = document.querySelector('.arxiv-kw-float-panel');
+        const btn = document.querySelector('.arxiv-kw-float-btn');
+        if (!panel) return;
+
+        isPanelOpen = false;
+        panel.classList.remove('open');
+        btn.classList.remove('active');
+    }
+
+    function createCountBadge() {
+        if (document.querySelector('.arxiv-kw-count-badge')) return;
+        const badge = document.createElement('div');
+        badge.className = 'arxiv-kw-count-badge';
+        document.body.appendChild(badge);
+    }
+
+    function updateCountBadge(matched, total) {
+        const badge = document.querySelector('.arxiv-kw-count-badge');
+        const btn = document.querySelector('.arxiv-kw-float-btn');
+        if (!badge || !btn) return;
+
+        if (matched > 0) {
+            badge.textContent = `${matched}/${total}`;
+            badge.classList.add('visible');
+            // 徽章显示在按钮左边
+            const btnRect = btn.getBoundingClientRect();
+            badge.style.right = (window.innerWidth - btnRect.left + 8) + 'px';
+            badge.style.top = btnRect.top + 'px';
+        } else {
+            badge.classList.remove('visible');
+        }
     }
 
     // ==================== 初始化 ====================
     async function init() {
-        createToolbar();
-        if (loadKeywords().length > 0) {
-            await processList();
-        }
+        createFloatButton();
+        createFloatPanel();
+        createCountBadge();
+
+        syncDarkClass();
+
+        await processList();
     }
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
@@ -738,7 +1484,7 @@
         window.addEventListener('DOMContentLoaded', () => setTimeout(init, 300));
     }
 
-    GM_registerMenuCommand('🏷️ 设置关键词', showConfigModal);
+    GM_registerMenuCommand('🏷️ 设置关键词', () => togglePanel());
     GM_registerMenuCommand('🔄 刷新排序', processList);
 
 })();
