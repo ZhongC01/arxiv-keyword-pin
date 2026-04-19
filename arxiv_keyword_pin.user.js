@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         arXiv Keyword Pin - 关键词置顶高亮
-// @namespace    https://github.com/你的用户名/arxiv-keyword-pin
+// @namespace    https://github.com/ZhongC01/arxiv-keyword-pin
 // @version      1.1
 // @description  在 arXiv 列表页中，将匹配关键词（标题/作者/摘要）的文章置顶并高亮，支持正则，自动展开摘要
 // @author       WYZ
@@ -12,10 +12,10 @@
 // @grant        GM_setValue
 // @grant        GM_addStyle
 // @run-at       document-idle
-// @updateURL    https://github.com/你的用户名/arxiv-keyword-pin/raw/main/arxiv-keyword-pin.user.js
-// @downloadURL  https://github.com/你的用户名/arxiv-keyword-pin/raw/main/arxiv-keyword-pin.user.js
-// @homepageURL  https://github.com/你的用户名/arxiv-keyword-pin
-// @supportURL   https://github.com/你的用户名/arxiv-keyword-pin/issues
+// @updateURL    https://github.com/ZhongC01/arxiv-keyword-pin/raw/main/arxiv-keyword-pin.user.js
+// @downloadURL  https://github.com/ZhongC01/arxiv-keyword-pin/raw/main/arxiv-keyword-pin.user.js
+// @homepageURL  https://github.com/ZhongC01/arxiv-keyword-pin
+// @supportURL   https://github.com/ZhongC01/arxiv-keyword-pin/issues
 // ==/UserScript==
 
 (function () {
