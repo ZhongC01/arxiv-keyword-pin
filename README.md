@@ -31,7 +31,7 @@
 1.  **安装脚本管理器**：
  [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展（[Chrome](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) / [Firefox](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/) / [Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)）
 2.  **安装本脚本**：
-    新建一个脚本，将本项目的源代码完整复制并粘贴到编辑器中保存。或者通过脚本管理器的 URL 导入功能进行安装。
+    新建一个脚本，将本项目的源代码完整复制并粘贴到编辑器中保存。或者通过脚本管理器的 URL 导入功能进行安装[arxiv_keyword_pin.user.js](https://github.com/ZhongC01/arxiv-keyword-pin/raw/main/arxiv_keyword_pin.user.js)。
 3.  **生效范围**：
     脚本默认匹配以下 URL 规则：
     * `https://arxiv.org/list/*`
