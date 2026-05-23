@@ -29,9 +29,11 @@
 ## 安装指南
 
 1.  **安装脚本管理器**：
- [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展（[Chrome](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) / [Firefox](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/) / [Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)）
+    安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展（[Chrome](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) / [Firefox](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/) / [Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd) / [Safari (Mac App Store)](https://apps.apple.com/app/tampermonkey/id6738342400)）。
+    > **🍎 Safari 用户提示**：由于 Safari 严格的安全和隐私机制（如 CSP 限制），Tampermonkey 在 Safari 上的部分网页可能无法正常注入脚本。如果您在 Safari 上遇到兼容性问题，强烈推荐使用专为苹果生态开发的优秀替代品 [Userscripts](https://apps.apple.com/app/userscripts/id1463298887)，操作逻辑与 Tampermonkey 类似且对 Safari 支持更好。
 2.  **安装本脚本**：
-    新建一个脚本，将本项目的源代码完整复制并粘贴到编辑器中保存。或者通过脚本管理器的 URL 导入功能进行安装[arxiv_keyword_pin.user.js](https://github.com/ZhongC01/arxiv-keyword-pin/raw/main/arxiv_keyword_pin.user.js)。
+    - **方式一（推荐）**：点击此链接直接安装 [arxiv_keyword_pin.user.js](https://github.com/ZhongC01/arxiv-keyword-pin/raw/main/arxiv_keyword_pin.user.js)，脚本管理器会自动弹出安装确认页面。
+    - **方式二**：在脚本管理器面板中新建一个脚本，将本项目的源代码完整复制并粘贴到编辑器中，然后保存（Ctrl+S / Cmd+S）。
 3.  **生效范围**：
     脚本默认匹配以下 URL 规则：
     * `https://arxiv.org/list/*`
